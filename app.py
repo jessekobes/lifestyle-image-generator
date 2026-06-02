@@ -15,7 +15,11 @@ st.set_page_config(
 def get_client():
     try:
         from google import genai
-        return genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        from google.genai import types
+        return genai.Client(
+            api_key=st.secrets["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(api_version="v1"),
+        )
     except KeyError:
         return None
 
