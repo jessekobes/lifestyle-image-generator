@@ -158,16 +158,23 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
         )
         return response.generated_images[0].image.image_bytes
     else:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-preview-image-generation",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"],
-            ),
-        )
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                return part.inline_data.data
+        for model in ["gemini-2.0-flash-exp", "gemini-2.0-flash-preview-image-generation"]:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                    ),
+                )
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data is not None:
+                        return part.inline_data.data
+            except Exception as e:
+                err = str(e)
+                if any(code in err for code in ["404", "503", "429", "NOT_FOUND", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                    continue
+                raise
         raise RuntimeError("Geen afbeelding ontvangen. Probeer het opnieuw.")
 
 
