@@ -2,6 +2,7 @@ import streamlit as st
 import base64
 import io
 from PIL import Image
+from datetime import datetime
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -58,7 +59,6 @@ PRODUCT_TYPES = [
     "Anders",
 ]
 
-# Sleutels = Nederlandse weergavenaam | Waarden = Engelse AI-prompt
 SCENARIOS = {
     "Treinreis": (
         "placed flat on a textured plastic train tray-table next to a dutch passport "
@@ -100,6 +100,20 @@ DEFAULT_NEGATIVE = (
     "trash, chaotic backgrounds, cheap-looking plastic, low-quality, CGI look, "
     "plastic texture, watermark, blurry product."
 )
+
+ASPECT_OPTIONS = {
+    "4:3 (Standaard)": "4:3",
+    "1:1 (Instagram vierkant)": "1:1",
+    "9:16 (Story / Portrait)": "9:16",
+    "16:9 (Webbanner / Landscape)": "16:9",
+}
+
+POLLINATIONS_SIZES = {
+    "4:3": (1024, 768),
+    "1:1": (1024, 1024),
+    "9:16": (576, 1024),
+    "16:9": (1024, 576),
+}
 
 SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
 Describe the environment and setting visible in this image so it can be used as a backdrop for a product photo.
@@ -160,14 +174,12 @@ def analyze_scene_image(client, scene_file):
 
 def analyze_product_images(client, uploaded_files, product_type):
     from google.genai import types
-
     parts = [uploaded_file_to_part(f) for f in uploaded_files]
     parts.append(
         types.Part.from_text(
             text=f"The product type is: {product_type}.\n\n{ANALYSIS_PROMPT}"
         )
     )
-
     for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]:
         try:
             response = client.models.generate_content(model=model, contents=parts)
@@ -192,18 +204,23 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
     )
 
 
-
-def generate_with_pollinations(prompt):
-    import requests, urllib.parse
+def generate_with_pollinations(prompt, aspect_ratio="4:3", number_of_images=1):
+    import requests, urllib.parse, random
+    w, h = POLLINATIONS_SIZES.get(aspect_ratio, (1024, 768))
     encoded = urllib.parse.quote(prompt[:800])
-    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=768&model=flux&nologo=true&enhance=false"
-    response = requests.get(url, timeout=120)
-    if response.status_code != 200:
-        raise RuntimeError(f"Pollinations fout {response.status_code}: {response.text[:200]}")
-    return response.content
+    images = []
+    for _ in range(number_of_images):
+        seed = random.randint(0, 999999)
+        url = (f"https://image.pollinations.ai/prompt/{encoded}"
+               f"?width={w}&height={h}&model=flux&nologo=true&enhance=false&seed={seed}")
+        response = requests.get(url, timeout=120)
+        if response.status_code != 200:
+            raise RuntimeError(f"Pollinations fout {response.status_code}: {response.text[:200]}")
+        images.append(response.content)
+    return images
 
 
-def generate_lifestyle_image(client, prompt, use_imagen3=False):
+def generate_lifestyle_image(client, prompt, use_imagen3=False, number_of_images=1, aspect_ratio="4:3"):
     from google.genai import types
 
     if use_imagen3:
@@ -211,33 +228,38 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
             model="imagen-3.0-generate-001",
             prompt=prompt,
             config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="4:3",
+                number_of_images=number_of_images,
+                aspect_ratio=aspect_ratio,
             ),
         )
-        return response.generated_images[0].image.image_bytes
+        return [img.image_bytes for img in response.generated_images]
     else:
         errors = []
         for model in ["gemini-2.5-flash-image", "gemini-2.0-flash-exp", "gemini-2.0-flash-preview-image-generation"]:
             try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                    ),
-                )
-                candidate = response.candidates[0]
-                text_parts = []
-                for part in candidate.content.parts:
-                    if part.inline_data is not None:
-                        return part.inline_data.data
-                    if hasattr(part, "text") and part.text:
-                        text_parts.append(part.text)
-                if text_parts:
-                    raise RuntimeError(f"Model stuurde tekst: {' '.join(text_parts)[:300]}")
-                finish = getattr(candidate, "finish_reason", None)
-                raise RuntimeError(f"Geen afbeelding (finish_reason: {finish})")
+                images = []
+                for _ in range(number_of_images):
+                    response = client.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["IMAGE", "TEXT"],
+                        ),
+                    )
+                    candidate = response.candidates[0]
+                    text_parts = []
+                    for part in candidate.content.parts:
+                        if part.inline_data is not None:
+                            images.append(part.inline_data.data)
+                            break
+                        if hasattr(part, "text") and part.text:
+                            text_parts.append(part.text)
+                    else:
+                        if text_parts:
+                            raise RuntimeError(f"Model stuurde tekst: {' '.join(text_parts)[:300]}")
+                        finish = getattr(candidate, "finish_reason", None)
+                        raise RuntimeError(f"Geen afbeelding (finish_reason: {finish})")
+                return images
             except RuntimeError:
                 raise
             except Exception as e:
@@ -250,7 +272,7 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
 st.title("📸 Lifestyle Image Generator")
 st.caption(
     "Upload productfoto's → kies een lifestyle scène → genereer een fotorealistische "
-    "marketingafbeelding met Google Imagen 3."
+    "marketingafbeelding."
 )
 st.divider()
 
@@ -262,6 +284,22 @@ if client is None:
         "Secrets-instellingen op Streamlit Community Cloud."
     )
     st.stop()
+
+# ── Session state initialisatie ───────────────────────────────────────────────
+st.session_state.setdefault("product_description", None)
+st.session_state.setdefault("last_files", [])
+st.session_state.setdefault("scene_description", None)
+st.session_state.setdefault("last_scene_file", None)
+st.session_state.setdefault("description_edit", "")
+st.session_state.setdefault("history", [])
+st.session_state.setdefault("brand_profiles", {
+    "Standaard": {"lighting": DEFAULT_LIGHTING, "mood": DEFAULT_MOOD, "negative": DEFAULT_NEGATIVE}
+})
+st.session_state.setdefault("last_final_prompt", None)
+st.session_state.setdefault("last_gen_cfg", None)
+st.session_state.setdefault("lighting", DEFAULT_LIGHTING)
+st.session_state.setdefault("mood", DEFAULT_MOOD)
+st.session_state.setdefault("negative_prompt", DEFAULT_NEGATIVE)
 
 # ── Twee kolommen ─────────────────────────────────────────────────────────────
 left, right = st.columns([1, 1], gap="large")
@@ -291,30 +329,71 @@ with left:
         if len(uploaded_files) > 3:
             st.caption(f"+ nog {len(uploaded_files) - 3} afbeelding(en) geüpload.")
 
+    with st.expander("Productbeschrijving bewerken", expanded=False):
+        st.text_area(
+            "Productbeschrijving",
+            key="description_edit",
+            height=120,
+            help="Wordt automatisch ingevuld na de eerste generatie. Pas aan indien Gemini iets verkeerd beschrijft.",
+            placeholder="Wordt automatisch ingevuld na eerste generatie. Pas hier aan indien gewenst.",
+            label_visibility="collapsed",
+        )
+
     st.divider()
 
     # ── 2. Merkrichtlijnen ────────────────────────────────────────────────────
     st.subheader("2  Merkrichtlijnen")
 
     with st.expander("Merkrichtlijnen bewerken", expanded=False):
+        # Profielbeheer
+        profiel_namen = ["— Kies profiel —"] + list(st.session_state.brand_profiles.keys())
+        pcol1, pcol2 = st.columns([3, 1])
+        gekozen = pcol1.selectbox("Laad profiel", profiel_namen, key="profiel_keuze", label_visibility="collapsed")
+        if pcol2.button("Laden", use_container_width=True) and gekozen != "— Kies profiel —":
+            p = st.session_state.brand_profiles[gekozen]
+            st.session_state.lighting = p["lighting"]
+            st.session_state.mood = p["mood"]
+            st.session_state.negative_prompt = p["negative"]
+            st.rerun()
+
+        st.divider()
+
         lighting = st.text_area(
             "Belichting & Kleuren",
-            value=DEFAULT_LIGHTING,
+            key="lighting",
             height=90,
             help="Beschrijft de gewenste lichtomstandigheden en kleurpalet (in het Engels voor beste resultaat).",
         )
         mood = st.text_area(
             "Visuele Stijl",
-            value=DEFAULT_MOOD,
+            key="mood",
             height=90,
             help="Beschrijft de algehele sfeer en fotografiestijl (in het Engels voor beste resultaat).",
         )
         negative_prompt = st.text_area(
             "Negatieve Prompt (wat te vermijden)",
-            value=DEFAULT_NEGATIVE,
+            key="negative_prompt",
             height=90,
             help="Alles wat NIET in het beeld mag verschijnen (in het Engels voor beste resultaat).",
         )
+
+        st.divider()
+
+        # Profiel opslaan
+        scol1, scol2 = st.columns([3, 1])
+        profiel_naam = scol1.text_input(
+            "Naam", placeholder="bijv. Zomercollectie", label_visibility="collapsed", key="nieuw_profiel_naam"
+        )
+        if scol2.button("Opslaan", use_container_width=True, key="opslaan_profiel"):
+            if profiel_naam.strip():
+                st.session_state.brand_profiles[profiel_naam.strip()] = {
+                    "lighting": st.session_state.lighting,
+                    "mood": st.session_state.mood,
+                    "negative": st.session_state.negative_prompt,
+                }
+                st.success(f"Profiel '{profiel_naam.strip()}' opgeslagen.")
+            else:
+                st.warning("Vul een profielnaam in om op te slaan.")
 
     st.divider()
 
@@ -337,8 +416,7 @@ with left:
                 "light streaming through a window."
             ),
             height=130,
-            help="Beschrijf de omgeving, objecten naast het product, belichting en sfeer. "
-                 "Engels geeft de scherpste resultaten.",
+            help="Beschrijf de omgeving, objecten naast het product, belichting en sfeer.",
         )
         scenario_text = custom_scenario.strip()
         scene_image = None
@@ -351,8 +429,7 @@ with left:
             "Upload een voorbeeldafbeelding van de gewenste scène",
             type=["jpg", "jpeg", "png", "webp"],
             accept_multiple_files=False,
-            help="Upload een foto van de omgeving of setting waar je het product in wilt plaatsen. "
-                 "Gemini analyseert de scène automatisch.",
+            help="Upload een foto van de omgeving of setting waar je het product in wilt plaatsen.",
         )
         scenario_text = None
         if scene_image:
@@ -367,38 +444,48 @@ with left:
 
     st.divider()
 
-    # ── 4. Beeldgeneratiemodel ────────────────────────────────────────────────
+    # ── 4. Beeldkwaliteit ─────────────────────────────────────────────────────
     st.subheader("4  Beeldkwaliteit")
 
     image_model = st.radio(
-        "Kies het beeldgeneratiemodel",
+        "Beeldgeneratiemodel",
         options=[
             "FLUX — Pollinations.ai (gratis, testen)",
             "Imagen 3 — Google (~€0,03/afbeelding)",
             "Gemini Flash (experimenteel)",
         ],
         index=0,
-        help="FLUX via Pollinations.ai is volledig gratis, geen API-sleutel nodig. Imagen 3 geeft de hoogste kwaliteit maar vereist Google Cloud billing.",
+        help="FLUX via Pollinations.ai is volledig gratis. Imagen 3 geeft de hoogste kwaliteit maar vereist Google Cloud billing.",
     )
     use_hf = image_model.startswith("FLUX")
     use_imagen3 = image_model.startswith("Imagen 3")
 
     if use_hf:
-        st.info(
-            "**FLUX via Pollinations.ai** — volledig gratis, geen API-sleutel nodig. "
-            "Ideaal om de prompt-kwaliteit te testen voor productiegebruik."
-        )
+        st.info("**FLUX via Pollinations.ai** — volledig gratis, geen API-sleutel nodig.")
     elif use_imagen3:
-        st.info(
-            "**Imagen 3** — Google. Vereist actieve Google Cloud billing. "
-            "Kosten: ~€0,03–0,04 per afbeelding."
-        )
+        st.info("**Imagen 3** — Google. Vereist actieve Google Cloud billing. ~€0,03–0,04/afbeelding.")
     else:
         st.warning("**Gemini Flash** is experimenteel en mogelijk beperkt beschikbaar.")
 
+    aspect_label = st.selectbox(
+        "Aspectratio",
+        options=list(ASPECT_OPTIONS.keys()),
+        index=0,
+        help="Kies het formaat voor de gegenereerde afbeelding.",
+    )
+    aspect_ratio_key = ASPECT_OPTIONS[aspect_label]
+
+    number_of_images = st.slider(
+        "Aantal varianten",
+        min_value=1,
+        max_value=3,
+        value=1,
+        help="Genereer meerdere varianten tegelijk. Let op: elke variant verbruikt API-quota.",
+    )
+
     st.divider()
 
-    # ── 5. Waarschuwing gratis limiet ─────────────────────────────────────────
+    # ── 5. Bevestiging & genereren ────────────────────────────────────────────
     st.warning(
         "**Let op: API-limieten — lees dit voordat je genereert.**\n\n"
         "- Gemini Flash analyse: ~10 verzoeken per minuut op de gratis laag.\n"
@@ -406,9 +493,7 @@ with left:
         "Controleer je verbruik via **Google AI Studio → API usage**."
     )
 
-    confirmed = st.checkbox(
-        "Ik begrijp de API-limieten en zal niet overmatig genereren."
-    )
+    confirmed = st.checkbox("Ik begrijp de API-limieten en zal niet overmatig genereren.")
 
     custom_empty = (scenario_name == "✏️ Eigen scenario" and not scenario_text)
     scene_empty = (scenario_name == "📷 Voorbeeldafbeelding" and not scene_image)
@@ -431,99 +516,144 @@ with left:
 
 # ── Rechterkolom: uitvoer ─────────────────────────────────────────────────────
 with right:
-    st.subheader("4  Gegenereerde Afbeelding")
+    st.subheader("Uitvoer")
 
-    if "product_description" not in st.session_state:
-        st.session_state.product_description = None
-    if "last_files" not in st.session_state:
-        st.session_state.last_files = []
-    if "scene_description" not in st.session_state:
-        st.session_state.scene_description = None
-    if "last_scene_file" not in st.session_state:
-        st.session_state.last_scene_file = None
+    is_regen = st.session_state.pop("regenerate", False)
 
-    if generate_btn:
-        current_file_names = [f.name for f in uploaded_files]
-        files_changed = current_file_names != st.session_state.last_files
+    if generate_btn or is_regen:
+        safe_name = (scenario_name.lower().replace(" ", "_").replace("/", "")
+                     .replace("✏️_", "eigen_").replace("📷_", "scene_"))
 
-        if files_changed or st.session_state.product_description is None:
-            with st.spinner("Stap 1/3 — Productafbeeldingen analyseren met Gemini..."):
-                try:
-                    for f in uploaded_files:
-                        f.seek(0)
-                    description = analyze_product_images(client, uploaded_files, product_type)
-                    st.session_state.product_description = description
-                    st.session_state.last_files = current_file_names
-                except Exception as e:
-                    st.error(f"Afbeeldingsanalyse mislukt: {e}")
-                    st.stop()
+        if is_regen and st.session_state.last_final_prompt and st.session_state.last_gen_cfg:
+            # ── Opnieuw genereren: sla analyse over ───────────────────────────
+            final_prompt = st.session_state.last_final_prompt
+            cfg = st.session_state.last_gen_cfg
+            r_use_hf = cfg["use_hf"]
+            r_use_imagen3 = cfg["use_imagen3"]
+            r_aspect = cfg["aspect_ratio"]
+            r_n = cfg["n"]
+            model_label = cfg["model_label"]
+            safe_name = cfg.get("safe_name", safe_name)
+            step_label = "Opnieuw genereren"
         else:
-            description = st.session_state.product_description
+            # ── Normale flow ──────────────────────────────────────────────────
+            current_file_names = [f.name for f in uploaded_files]
+            files_changed = current_file_names != st.session_state.last_files
 
-        if scenario_name == "📷 Voorbeeldafbeelding":
-            scene_file_name = scene_image.name if scene_image else None
-            if scene_file_name != st.session_state.last_scene_file or st.session_state.scene_description is None:
-                with st.spinner("Stap 2/3 — Voorbeeldscène analyseren met Gemini..."):
+            if files_changed or st.session_state.product_description is None:
+                with st.spinner("Stap 1 — Productafbeeldingen analyseren met Gemini..."):
                     try:
-                        scene_desc = analyze_scene_image(client, scene_image)
-                        st.session_state.scene_description = scene_desc
-                        st.session_state.last_scene_file = scene_file_name
+                        for f in uploaded_files:
+                            f.seek(0)
+                        description = analyze_product_images(client, uploaded_files, product_type)
+                        st.session_state.product_description = description
+                        st.session_state.last_files = current_file_names
+                        if files_changed or not st.session_state.description_edit:
+                            st.session_state.description_edit = description
                     except Exception as e:
-                        st.error(f"Scèneanalyse mislukt: {e}")
+                        st.error(f"Afbeeldingsanalyse mislukt: {e}")
                         st.stop()
-            active_scenario_text = st.session_state.scene_description
-            with st.expander("Scènebeschrijving (automatisch gegenereerd)", expanded=False):
-                st.write(active_scenario_text)
-            step_label = "Stap 3/3"
-        else:
-            active_scenario_text = scenario_text
-            step_label = "Stap 2/2"
 
-        with st.expander("Productbeschrijving (automatisch gegenereerd)", expanded=False):
-            st.write(st.session_state.product_description)
+            if scenario_name == "📷 Voorbeeldafbeelding":
+                scene_file_name = scene_image.name if scene_image else None
+                if scene_file_name != st.session_state.last_scene_file or st.session_state.scene_description is None:
+                    with st.spinner("Stap 2 — Voorbeeldscène analyseren met Gemini..."):
+                        try:
+                            scene_desc = analyze_scene_image(client, scene_image)
+                            st.session_state.scene_description = scene_desc
+                            st.session_state.last_scene_file = scene_file_name
+                        except Exception as e:
+                            st.error(f"Scèneanalyse mislukt: {e}")
+                            st.stop()
+                active_scenario_text = st.session_state.scene_description
+                with st.expander("Scènebeschrijving (automatisch gegenereerd)", expanded=False):
+                    st.write(active_scenario_text)
+                step_label = "Stap 3"
+            else:
+                active_scenario_text = scenario_text
+                step_label = "Stap 2"
 
-        final_prompt = build_final_prompt(
-            st.session_state.product_description,
-            product_type,
-            active_scenario_text,
-            lighting,
-            mood,
-            negative_prompt,
-        )
+            with st.expander("Productbeschrijving (gebruikt voor generatie)", expanded=False):
+                st.write(st.session_state.description_edit or st.session_state.product_description)
 
-        if use_hf:
-            model_label = "FLUX (Pollinations.ai)"
-        elif use_imagen3:
-            model_label = "Imagen 3 (Google)"
-        else:
-            model_label = "Gemini Flash"
+            final_prompt = build_final_prompt(
+                st.session_state.description_edit or st.session_state.product_description,
+                product_type,
+                active_scenario_text,
+                lighting,
+                mood,
+                negative_prompt,
+            )
+
+            if use_hf:
+                model_label = "FLUX (Pollinations.ai)"
+            elif use_imagen3:
+                model_label = "Imagen 3 (Google)"
+            else:
+                model_label = "Gemini Flash"
+
+            r_use_hf, r_use_imagen3 = use_hf, use_imagen3
+            r_aspect, r_n = aspect_ratio_key, number_of_images
+
+            st.session_state.last_final_prompt = final_prompt
+            st.session_state.last_gen_cfg = {
+                "use_hf": use_hf, "use_imagen3": use_imagen3,
+                "aspect_ratio": aspect_ratio_key, "n": number_of_images,
+                "model_label": model_label, "safe_name": safe_name,
+            }
 
         with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
             st.code(final_prompt, language=None)
 
-        with st.spinner(f"{step_label} — Lifestyle afbeelding genereren met {model_label}..."):
+        variant_label = f"{r_n} variant{'en' if r_n > 1 else ''}"
+        with st.spinner(f"{step_label} — {variant_label} genereren met {model_label}..."):
             try:
-                if use_hf:
-                    image_bytes = generate_with_pollinations(final_prompt)
-                elif use_imagen3:
-                    image_bytes = generate_lifestyle_image(get_imagen_client(), final_prompt, use_imagen3=True)
+                if r_use_hf:
+                    images = generate_with_pollinations(final_prompt, r_aspect, r_n)
+                elif r_use_imagen3:
+                    images = generate_lifestyle_image(get_imagen_client(), final_prompt, True, r_n, r_aspect)
                 else:
-                    image_bytes = generate_lifestyle_image(get_flash_image_client(), final_prompt, use_imagen3=False)
+                    images = generate_lifestyle_image(get_flash_image_client(), final_prompt, False, r_n, r_aspect)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
 
-        st.success("Afbeelding succesvol gegenereerd!")
-        st.image(image_bytes, use_container_width=True)
-        safe_name = (scenario_name.lower().replace(" ", "_").replace("/", "")
-                     .replace("✏️_", "eigen_").replace("📷_", "scene_"))
-        st.download_button(
-            label="Afbeelding downloaden",
-            data=image_bytes,
-            file_name=f"lifestyle_{safe_name}.png",
-            mime="image/png",
-            use_container_width=True,
-        )
+        st.success(f"{'Afbeelding' if len(images) == 1 else f'{len(images)} afbeeldingen'} succesvol gegenereerd!")
+
+        if len(images) == 1:
+            st.image(images[0], use_container_width=True)
+            st.download_button(
+                label="Afbeelding downloaden",
+                data=images[0],
+                file_name=f"lifestyle_{safe_name}.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+        else:
+            img_cols = st.columns(len(images))
+            for i, (col, img) in enumerate(zip(img_cols, images)):
+                col.image(img, use_container_width=True)
+                col.download_button(
+                    f"Download {i + 1}",
+                    data=img,
+                    file_name=f"lifestyle_{safe_name}_{i + 1}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"dl_{i}",
+                )
+
+        if st.button("🔄 Opnieuw genereren", use_container_width=True):
+            st.session_state.regenerate = True
+            st.rerun()
+
+        # Opslaan in sessiegeschiedenis
+        st.session_state.history.insert(0, {
+            "images": images,
+            "scenario": scenario_name,
+            "model": model_label,
+            "timestamp": datetime.now().strftime("%H:%M"),
+        })
+        st.session_state.history = st.session_state.history[:10]
 
     else:
         st.markdown(
@@ -543,6 +673,23 @@ with right:
             """,
             unsafe_allow_html=True,
         )
-        if st.session_state.product_description:
-            with st.expander("Gecachede productbeschrijving (vorige sessie)", expanded=False):
-                st.write(st.session_state.product_description)
+
+    # ── Sessiegeschiedenis ────────────────────────────────────────────────────
+    if st.session_state.history:
+        st.divider()
+        with st.expander(f"Sessiegeschiedenis ({len(st.session_state.history)} generaties)", expanded=False):
+            for idx, item in enumerate(st.session_state.history):
+                st.caption(f"**{item['timestamp']}** — {item['scenario']} — {item['model']}")
+                h_cols = st.columns(min(len(item["images"]), 3))
+                for j, (col, img) in enumerate(zip(h_cols, item["images"])):
+                    col.image(img, use_container_width=True)
+                    col.download_button(
+                        "⬇",
+                        data=img,
+                        file_name=f"history_{idx}_{j}.png",
+                        mime="image/png",
+                        key=f"hist_{idx}_{j}",
+                        use_container_width=True,
+                    )
+                if idx < len(st.session_state.history) - 1:
+                    st.divider()
