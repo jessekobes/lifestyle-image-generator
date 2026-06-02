@@ -3,14 +3,14 @@ import base64
 import io
 from PIL import Image
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Lifestyle Image Generator",
     page_icon="📸",
     layout="wide",
 )
 
-# ── Gemini client (lazy-init so missing key shows a friendly error) ───────────
+# ── Gemini client ─────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_client():
     try:
@@ -19,42 +19,44 @@ def get_client():
     except KeyError:
         return None
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# ── Constanten ────────────────────────────────────────────────────────────────
 PRODUCT_TYPES = [
     "Powerbank",
-    "Wireless Earbuds",
-    "Smartphone Case",
-    "Laptop Sleeve",
-    "Smart Watch",
-    "Portable Speaker",
-    "Other",
+    "Draadloze Oordopjes",
+    "Smartphonehoesje",
+    "Laptophoes",
+    "Smartwatch",
+    "Draadloze Speaker",
+    "Anders",
 ]
 
+# Sleutels = Nederlandse weergavenaam | Waarden = Engelse AI-prompt
 SCENARIOS = {
-    "Train Travel": (
+    "Treinreis": (
         "placed flat on a textured plastic train tray-table next to a dark blue passport "
         "and a ceramic coffee mug. Natural window light casting soft shadows, blurred "
         "landscape rushing by in the background."
     ),
-    "Music Festival": (
+    "Muziekfestival": (
         "placed on a weathered wooden picnic table at a bustling outdoor music festival, "
         "next to a colorful festival wristband and trendy sunglasses. Casual lighting, "
         "blurred background of festival crowds and tents."
     ),
-    "City Park": (
+    "Stadspark": (
         "placed on a classic checkered picnic blanket in the lush green grass of a city "
         "park, next to a pair of sunglasses and a glass soda bottle. Warm, golden sunlight "
         "filtering through tree leaves."
     ),
-    "Modern Office": (
+    "Modern Kantoor": (
         "placed on a real oak wood desk next to a modern wireless computer mouse and a "
         "black ink pen. Clean, everyday office environment with realistic proportions and "
         "reflections."
     ),
-    "Nature/Outdoor": (
+    "Natuur / Buiten": (
         "placed on a rough, dusty grey rock next to a folded paper map and a standard "
         "metallic climbing carabiner. Diffused, overcast daylight in a pine forest."
     ),
+    "✏️ Eigen scenario": None,
 }
 
 DEFAULT_LIGHTING = (
@@ -86,9 +88,8 @@ Do NOT mention any brand names, logos, or model numbers.
 Output only the description as a single dense paragraph — no headers, no lists."""
 
 
-# ── Helper functions ──────────────────────────────────────────────────────────
+# ── Helper functies ───────────────────────────────────────────────────────────
 def uploaded_file_to_part(uploaded_file):
-    """Convert a Streamlit UploadedFile to a google-genai Part."""
     from google.genai import types
     raw = uploaded_file.read()
     mime = uploaded_file.type or "image/jpeg"
@@ -96,7 +97,6 @@ def uploaded_file_to_part(uploaded_file):
 
 
 def analyze_product_images(client, uploaded_files, product_type):
-    """Step 1 — use Gemini 2.5 Flash to describe the product from the images."""
     from google.genai import types
 
     parts = [uploaded_file_to_part(f) for f in uploaded_files]
@@ -114,7 +114,7 @@ def analyze_product_images(client, uploaded_files, product_type):
             if "503" in str(e) or "UNAVAILABLE" in str(e):
                 continue
             raise
-    raise RuntimeError("All models unavailable. Please try again in a minute.")
+    raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
 
 
 def build_final_prompt(product_description, product_type, scenario_text, lighting, mood):
@@ -129,7 +129,6 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
 
 
 def generate_lifestyle_image(client, prompt, negative_prompt):
-    """Step 2 — generate the lifestyle image with Imagen 3."""
     from google.genai import types
 
     response = client.models.generate_images(
@@ -147,39 +146,39 @@ def generate_lifestyle_image(client, prompt, negative_prompt):
 # ── UI ────────────────────────────────────────────────────────────────────────
 st.title("📸 Lifestyle Image Generator")
 st.caption(
-    "Upload your product photos → pick a lifestyle scene → generate a photorealistic "
-    "marketing image powered by Google Imagen 3."
+    "Upload productfoto's → kies een lifestyle scène → genereer een fotorealistische "
+    "marketingafbeelding met Google Imagen 3."
 )
 st.divider()
 
 client = get_client()
 if client is None:
     st.error(
-        "**GEMINI_API_KEY not found.** "
-        "Add it to `.streamlit/secrets.toml` locally, or to your app's Secrets on "
-        "Streamlit Community Cloud."
+        "**GEMINI_API_KEY niet gevonden.** "
+        "Voeg de sleutel toe aan `.streamlit/secrets.toml` (lokaal) of via de "
+        "Secrets-instellingen op Streamlit Community Cloud."
     )
     st.stop()
 
-# ── Layout: two columns ───────────────────────────────────────────────────────
+# ── Twee kolommen ─────────────────────────────────────────────────────────────
 left, right = st.columns([1, 1], gap="large")
 
 with left:
-    # ── 1. Product Configuration ──────────────────────────────────────────────
-    st.subheader("1  Product Configuration")
+    # ── 1. Productconfiguratie ────────────────────────────────────────────────
+    st.subheader("1  Productconfiguratie")
 
     product_type = st.selectbox(
-        "Product Type",
+        "Producttype",
         options=PRODUCT_TYPES,
         index=0,
-        help="Select the type of product you are photographing.",
+        help="Selecteer het type product dat je fotografeert.",
     )
 
     uploaded_files = st.file_uploader(
-        "Upload Product Images (Front, Side, Top — up to 5)",
+        "Upload productfoto's (voor-, zij- en bovenaanzicht — max. 5)",
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
-        help="Upload clear, well-lit photos of your product from multiple angles.",
+        help="Upload scherpe, goed belichte foto's van je product vanuit meerdere hoeken.",
     )
 
     if uploaded_files:
@@ -187,78 +186,101 @@ with left:
         for i, f in enumerate(uploaded_files[:3]):
             cols[i].image(f, caption=f.name, use_container_width=True)
         if len(uploaded_files) > 3:
-            st.caption(f"+ {len(uploaded_files) - 3} more image(s) uploaded.")
+            st.caption(f"+ nog {len(uploaded_files) - 3} afbeelding(en) geüpload.")
 
     st.divider()
 
-    # ── 2. Brand Guidelines ───────────────────────────────────────────────────
-    st.subheader("2  Brand Guidelines")
+    # ── 2. Merkrichtlijnen ────────────────────────────────────────────────────
+    st.subheader("2  Merkrichtlijnen")
 
-    with st.expander("Edit Brand Guidelines", expanded=False):
+    with st.expander("Merkrichtlijnen bewerken", expanded=False):
         lighting = st.text_area(
-            "Lighting & Colors",
+            "Belichting & Kleuren",
             value=DEFAULT_LIGHTING,
             height=90,
+            help="Beschrijft de gewenste lichtomstandigheden en kleurpalet (in het Engels voor beste resultaat).",
         )
         mood = st.text_area(
-            "Visual Mood",
+            "Visuele Stijl",
             value=DEFAULT_MOOD,
             height=90,
+            help="Beschrijft de algehele sfeer en fotografiestijl (in het Engels voor beste resultaat).",
         )
         negative_prompt = st.text_area(
-            "Negative Prompt (what to avoid)",
+            "Negatieve Prompt (wat te vermijden)",
             value=DEFAULT_NEGATIVE,
             height=90,
+            help="Alles wat NIET in het beeld mag verschijnen (in het Engels voor beste resultaat).",
         )
-    # Show compact preview when collapsed
-    if "lighting" not in dir():
-        lighting = DEFAULT_LIGHTING
-        mood = DEFAULT_MOOD
-        negative_prompt = DEFAULT_NEGATIVE
 
     st.divider()
 
-    # ── 3. Scenario Selection ─────────────────────────────────────────────────
+    # ── 3. Scenariokeuze ──────────────────────────────────────────────────────
     st.subheader("3  Lifestyle Scenario")
 
     scenario_name = st.selectbox(
-        "Choose a scenario",
+        "Kies een scenario",
         options=list(SCENARIOS.keys()),
         index=0,
     )
-    st.info(f"**Scene:** The {product_type} is {SCENARIOS[scenario_name]}")
+
+    if scenario_name == "✏️ Eigen scenario":
+        custom_scenario = st.text_area(
+            "Beschrijf je eigen scène",
+            placeholder=(
+                "Schrijf bij voorkeur in het Engels voor het beste resultaat.\n\n"
+                "Voorbeeld: placed on a white marble kitchen counter next to a "
+                "glass of orange juice and a folded linen napkin. Bright morning "
+                "light streaming through a window."
+            ),
+            height=130,
+            help="Beschrijf de omgeving, objecten naast het product, belichting en sfeer. "
+                 "Engels geeft de scherpste resultaten.",
+        )
+        scenario_text = custom_scenario.strip()
+        if scenario_text:
+            st.info(f"**Jouw scène:** Het product is {scenario_text}")
+        else:
+            st.warning("Vul hierboven een scenariobeschrijving in om te kunnen genereren.")
+    else:
+        scenario_text = SCENARIOS[scenario_name]
+        st.info(f"**Scène:** Het product is {scenario_text}")
 
     st.divider()
 
-    # ── 4. Cost / Rate-limit Warning ──────────────────────────────────────────
+    # ── 4. Waarschuwing gratis limiet ─────────────────────────────────────────
     st.warning(
-        "**Free Tier Rate Limits — please read before generating.**\n\n"
-        "- Gemini 2.5 Flash: ~10 RPM / 250,000 TPM on the free tier.\n"
-        "- Imagen 3: limited free quota — each generation consumes quota.\n"
-        "- Generating repeatedly in quick succession may exhaust your free allowance "
-        "or trigger temporary blocks.\n\n"
-        "Check your usage at **Google AI Studio → API usage**."
+        "**Let op: gratis API-limieten — lees dit voordat je genereert.**\n\n"
+        "- Gemini Flash: ~10 verzoeken per minuut op de gratis laag.\n"
+        "- Imagen 3: beperkt gratis quota — elke generatie verbruikt quota.\n"
+        "- Snel achter elkaar genereren kan je gratis tegoed uitputten of "
+        "een tijdelijke blokkade veroorzaken.\n\n"
+        "Controleer je verbruik via **Google AI Studio → API usage**."
     )
 
     confirmed = st.checkbox(
-        "I understand the API rate limits and will not generate excessively."
+        "Ik begrijp de API-limieten en zal niet overmatig genereren."
     )
 
+    custom_empty = (scenario_name == "✏️ Eigen scenario" and not scenario_text)
+
     generate_btn = st.button(
-        "Generate Lifestyle Image",
+        "Lifestyle afbeelding genereren",
         type="primary",
-        disabled=not confirmed or not uploaded_files,
+        disabled=not confirmed or not uploaded_files or custom_empty,
         use_container_width=True,
     )
 
     if not uploaded_files:
-        st.caption("Upload at least one product image to enable generation.")
+        st.caption("Upload minimaal één productafbeelding om te beginnen.")
+    elif custom_empty:
+        st.caption("Vul een scenariobeschrijving in om te kunnen genereren.")
     elif not confirmed:
-        st.caption("Check the confirmation box above to enable the button.")
+        st.caption("Vink het bevestigingsvakje hierboven aan om de knop te activeren.")
 
-# ── Right column: output ──────────────────────────────────────────────────────
+# ── Rechterkolom: uitvoer ─────────────────────────────────────────────────────
 with right:
-    st.subheader("4  Generated Image")
+    st.subheader("4  Gegenereerde Afbeelding")
 
     if "product_description" not in st.session_state:
         st.session_state.product_description = None
@@ -266,53 +288,51 @@ with right:
         st.session_state.last_files = []
 
     if generate_btn:
-        # Detect if uploaded files changed → re-analyze
         current_file_names = [f.name for f in uploaded_files]
         files_changed = current_file_names != st.session_state.last_files
 
         if files_changed or st.session_state.product_description is None:
-            with st.spinner("Step 1/2 — Analyzing product images with Gemini..."):
+            with st.spinner("Stap 1/2 — Productafbeeldingen analyseren met Gemini..."):
                 try:
-                    # Reset file read positions
                     for f in uploaded_files:
                         f.seek(0)
                     description = analyze_product_images(client, uploaded_files, product_type)
-
                     st.session_state.product_description = description
                     st.session_state.last_files = current_file_names
                 except Exception as e:
-                    st.error(f"Image analysis failed: {e}")
+                    st.error(f"Afbeeldingsanalyse mislukt: {e}")
                     st.stop()
         else:
             description = st.session_state.product_description
 
-        with st.expander("Product Description (auto-generated)", expanded=False):
+        with st.expander("Productbeschrijving (automatisch gegenereerd)", expanded=False):
             st.write(st.session_state.product_description)
 
         final_prompt = build_final_prompt(
             st.session_state.product_description,
             product_type,
-            SCENARIOS[scenario_name],
+            scenario_text,
             lighting,
             mood,
         )
 
-        with st.expander("Final Prompt sent to Imagen 3", expanded=False):
+        with st.expander("Volledige prompt naar Imagen 3", expanded=False):
             st.code(final_prompt, language=None)
 
-        with st.spinner("Step 2/2 — Generating lifestyle image with Imagen 3..."):
+        with st.spinner("Stap 2/2 — Lifestyle afbeelding genereren met Imagen 3..."):
             try:
                 image_bytes = generate_lifestyle_image(client, final_prompt, negative_prompt)
             except Exception as e:
-                st.error(f"Image generation failed: {e}")
+                st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
 
-        st.success("Image generated successfully!")
+        st.success("Afbeelding succesvol gegenereerd!")
         st.image(image_bytes, use_container_width=True)
+        safe_name = scenario_name.lower().replace(" ", "_").replace("/", "").replace("✏️_", "eigen_")
         st.download_button(
-            label="Download Image",
+            label="Afbeelding downloaden",
             data=image_bytes,
-            file_name=f"lifestyle_{scenario_name.lower().replace(' ', '_')}.png",
+            file_name=f"lifestyle_{safe_name}.png",
             mime="image/png",
             use_container_width=True,
         )
@@ -330,11 +350,11 @@ with right:
                 color: #888;
                 font-size: 1.1rem;
             ">
-                Your generated image will appear here
+                Jouw gegenereerde afbeelding verschijnt hier
             </div>
             """,
             unsafe_allow_html=True,
         )
         if st.session_state.product_description:
-            with st.expander("Cached Product Description (from previous run)", expanded=False):
+            with st.expander("Gecachede productbeschrijving (vorige sessie)", expanded=False):
                 st.write(st.session_state.product_description)
