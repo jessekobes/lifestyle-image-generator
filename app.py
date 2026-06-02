@@ -85,6 +85,7 @@ SCENARIOS = {
         "metallic climbing carabiner. Diffused, overcast daylight in a pine forest."
     ),
     "✏️ Eigen scenario": None,
+    "📷 Voorbeeldafbeelding": None,
 }
 
 DEFAULT_LIGHTING = (
@@ -99,6 +100,20 @@ DEFAULT_NEGATIVE = (
     "trash, chaotic backgrounds, cheap-looking plastic, text, low-quality, CGI look, "
     "plastic texture, watermark, logo, brand name, blurry product."
 )
+
+SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
+Describe the environment and setting visible in this image so it can be used as a backdrop for a product photo.
+
+Focus ONLY on:
+- The surface or foreground where a product could be placed (material, texture, color)
+- Nearby props and objects visible in the scene
+- Background environment and depth
+- Lighting conditions (direction, quality, warm/cool, soft/hard)
+- Overall atmosphere and mood
+
+Do NOT describe any people, faces, or main subjects in the image.
+Output a single concise paragraph starting with "placed on/in/near..." that describes
+where and how a product would appear in this scene. No headers, no lists."""
 
 ANALYSIS_PROMPT = """You are a professional product photographer's assistant.
 Analyze the uploaded product image(s) and produce a hyper-detailed, technical,
@@ -122,6 +137,25 @@ def uploaded_file_to_part(uploaded_file):
     raw = uploaded_file.read()
     mime = uploaded_file.type or "image/jpeg"
     return types.Part.from_bytes(data=raw, mime_type=mime)
+
+
+def analyze_scene_image(client, scene_file):
+    from google.genai import types
+    scene_file.seek(0)
+    parts = [
+        uploaded_file_to_part(scene_file),
+        types.Part.from_text(text=SCENE_ANALYSIS_PROMPT),
+    ]
+    for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]:
+        try:
+            response = client.models.generate_content(model=model, contents=parts)
+            return response.text.strip()
+        except Exception as e:
+            err = str(e)
+            if any(code in err for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                continue
+            raise
+    raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
 
 
 def analyze_product_images(client, uploaded_files, product_type):
@@ -297,12 +331,28 @@ with left:
                  "Engels geeft de scherpste resultaten.",
         )
         scenario_text = custom_scenario.strip()
+        scene_image = None
         if scenario_text:
             st.info(f"**Jouw scène:** Het product is {scenario_text}")
         else:
             st.warning("Vul hierboven een scenariobeschrijving in om te kunnen genereren.")
+    elif scenario_name == "📷 Voorbeeldafbeelding":
+        scene_image = st.file_uploader(
+            "Upload een voorbeeldafbeelding van de gewenste scène",
+            type=["jpg", "jpeg", "png", "webp"],
+            accept_multiple_files=False,
+            help="Upload een foto van de omgeving of setting waar je het product in wilt plaatsen. "
+                 "Gemini analyseert de scène automatisch.",
+        )
+        scenario_text = None
+        if scene_image:
+            st.image(scene_image, caption="Voorbeeldscène", use_container_width=True)
+            st.info("Gemini analyseert deze scène automatisch bij het genereren.")
+        else:
+            st.warning("Upload een voorbeeldafbeelding om te kunnen genereren.")
     else:
         scenario_text = SCENARIOS[scenario_name]
+        scene_image = None
         st.info(f"**Scène:** Het product is {scenario_text}")
 
     st.divider()
@@ -344,11 +394,12 @@ with left:
     )
 
     custom_empty = (scenario_name == "✏️ Eigen scenario" and not scenario_text)
+    scene_empty = (scenario_name == "📷 Voorbeeldafbeelding" and not scene_image)
 
     generate_btn = st.button(
         "Lifestyle afbeelding genereren",
         type="primary",
-        disabled=not confirmed or not uploaded_files or custom_empty,
+        disabled=not confirmed or not uploaded_files or custom_empty or scene_empty,
         use_container_width=True,
     )
 
@@ -356,6 +407,8 @@ with left:
         st.caption("Upload minimaal één productafbeelding om te beginnen.")
     elif custom_empty:
         st.caption("Vul een scenariobeschrijving in om te kunnen genereren.")
+    elif scene_empty:
+        st.caption("Upload een voorbeeldafbeelding van de scène om te kunnen genereren.")
     elif not confirmed:
         st.caption("Vink het bevestigingsvakje hierboven aan om de knop te activeren.")
 
@@ -367,13 +420,17 @@ with right:
         st.session_state.product_description = None
     if "last_files" not in st.session_state:
         st.session_state.last_files = []
+    if "scene_description" not in st.session_state:
+        st.session_state.scene_description = None
+    if "last_scene_file" not in st.session_state:
+        st.session_state.last_scene_file = None
 
     if generate_btn:
         current_file_names = [f.name for f in uploaded_files]
         files_changed = current_file_names != st.session_state.last_files
 
         if files_changed or st.session_state.product_description is None:
-            with st.spinner("Stap 1/2 — Productafbeeldingen analyseren met Gemini..."):
+            with st.spinner("Stap 1/3 — Productafbeeldingen analyseren met Gemini..."):
                 try:
                     for f in uploaded_files:
                         f.seek(0)
@@ -386,13 +443,32 @@ with right:
         else:
             description = st.session_state.product_description
 
+        if scenario_name == "📷 Voorbeeldafbeelding":
+            scene_file_name = scene_image.name if scene_image else None
+            if scene_file_name != st.session_state.last_scene_file or st.session_state.scene_description is None:
+                with st.spinner("Stap 2/3 — Voorbeeldscène analyseren met Gemini..."):
+                    try:
+                        scene_desc = analyze_scene_image(client, scene_image)
+                        st.session_state.scene_description = scene_desc
+                        st.session_state.last_scene_file = scene_file_name
+                    except Exception as e:
+                        st.error(f"Scèneanalyse mislukt: {e}")
+                        st.stop()
+            active_scenario_text = st.session_state.scene_description
+            with st.expander("Scènebeschrijving (automatisch gegenereerd)", expanded=False):
+                st.write(active_scenario_text)
+            step_label = "Stap 3/3"
+        else:
+            active_scenario_text = scenario_text
+            step_label = "Stap 2/2"
+
         with st.expander("Productbeschrijving (automatisch gegenereerd)", expanded=False):
             st.write(st.session_state.product_description)
 
         final_prompt = build_final_prompt(
             st.session_state.product_description,
             product_type,
-            scenario_text,
+            active_scenario_text,
             lighting,
             mood,
             negative_prompt,
@@ -403,7 +479,7 @@ with right:
         with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
             st.code(final_prompt, language=None)
 
-        with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
+        with st.spinner(f"{step_label} — Lifestyle afbeelding genereren met {model_label}..."):
             try:
                 gen_client = get_imagen_client() if use_imagen3 else get_flash_image_client()
                 image_bytes = generate_lifestyle_image(gen_client, final_prompt, use_imagen3=use_imagen3)
@@ -413,7 +489,8 @@ with right:
 
         st.success("Afbeelding succesvol gegenereerd!")
         st.image(image_bytes, use_container_width=True)
-        safe_name = scenario_name.lower().replace(" ", "_").replace("/", "").replace("✏️_", "eigen_")
+        safe_name = (scenario_name.lower().replace(" ", "_").replace("/", "")
+                     .replace("✏️_", "eigen_").replace("📷_", "scene_"))
         st.download_button(
             label="Afbeelding downloaden",
             data=image_bytes,
