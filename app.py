@@ -97,8 +97,8 @@ DEFAULT_MOOD = (
     "atmosphere. Premium but lived-in."
 )
 DEFAULT_NEGATIVE = (
-    "trash, chaotic backgrounds, cheap-looking plastic, text, low-quality, CGI look, "
-    "plastic texture, watermark, logo, brand name, blurry product."
+    "trash, chaotic backgrounds, cheap-looking plastic, low-quality, CGI look, "
+    "plastic texture, watermark, blurry product."
 )
 
 SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
@@ -116,8 +116,8 @@ Output a single concise paragraph starting with "placed on/in/near..." that desc
 where and how a product would appear in this scene. No headers, no lists."""
 
 ANALYSIS_PROMPT = """You are a professional product photographer's assistant.
-Analyze the uploaded product image(s) and produce a hyper-detailed, technical,
-unbranded visual description of the physical product only.
+Analyze the uploaded product image(s) and produce a hyper-detailed, technical
+visual description of the physical product, including all branding exactly as it appears.
 
 Include ALL of the following if visible:
 - Overall shape and form factor (dimensions, thickness, curvature)
@@ -126,8 +126,8 @@ Include ALL of the following if visible:
 - Visible ports, buttons, indicators, seams, and their placement
 - Material quality cues (premium metal, soft-touch plastic, fabric, etc.)
 - Any distinguishing physical features (rounded corners, ridges, LED strip, etc.)
+- Brand name, logo placement, typography, and any text printed on the product
 
-Do NOT mention any brand names, logos, or model numbers.
 Output only the description as a single dense paragraph — no headers, no lists."""
 
 
