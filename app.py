@@ -137,15 +137,17 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
 def generate_lifestyle_image(client, prompt):
     from google.genai import types
 
-    response = client.models.generate_images(
-        model="imagen-3.0-generate-001",
-        prompt=prompt,
-        config=types.GenerateImagesConfig(
-            number_of_images=1,
-            aspect_ratio="4:3",
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-preview-image-generation",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
         ),
     )
-    return response.generated_images[0].image.image_bytes
+    for part in response.candidates[0].content.parts:
+        if part.inline_data is not None:
+            return part.inline_data.data
+    raise RuntimeError("Geen afbeelding ontvangen. Probeer het opnieuw.")
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
