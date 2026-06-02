@@ -61,7 +61,7 @@ PRODUCT_TYPES = [
 # Sleutels = Nederlandse weergavenaam | Waarden = Engelse AI-prompt
 SCENARIOS = {
     "Treinreis": (
-        "placed flat on a textured plastic train tray-table next to a dark blue passport "
+        "placed flat on a textured plastic train tray-table next to a dutch passport "
         "and a ceramic coffee mug. Natural window light casting soft shadows, blurred "
         "landscape rushing by in the background."
     ),
