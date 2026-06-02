@@ -172,7 +172,7 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
         return response.generated_images[0].image.image_bytes
     else:
         errors = []
-        for model in ["gemini-2.0-flash-exp", "gemini-2.0-flash-preview-image-generation"]:
+        for model in ["gemini-2.5-flash-image", "gemini-2.0-flash-exp", "gemini-2.0-flash-preview-image-generation"]:
             try:
                 response = client.models.generate_content(
                     model=model,
