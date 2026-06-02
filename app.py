@@ -118,18 +118,19 @@ def analyze_product_images(client, uploaded_files, product_type):
     raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
 
 
-def build_final_prompt(product_description, product_type, scenario_text, lighting, mood):
+def build_final_prompt(product_description, product_type, scenario_text, lighting, mood, negative_prompt):
     return (
         f"Professional lifestyle product photograph. "
         f"A {product_type} — described as: {product_description} — "
         f"is {scenario_text} "
         f"Lighting style: {lighting}. "
         f"Visual mood: {mood}. "
-        f"Photorealistic, high-resolution, commercial product photography."
+        f"Photorealistic, high-resolution, commercial product photography. "
+        f"Avoid: {negative_prompt}"
     )
 
 
-def generate_lifestyle_image(client, prompt, negative_prompt):
+def generate_lifestyle_image(client, prompt):
     from google.genai import types
 
     response = client.models.generate_images(
@@ -138,7 +139,6 @@ def generate_lifestyle_image(client, prompt, negative_prompt):
         config=types.GenerateImagesConfig(
             number_of_images=1,
             aspect_ratio="4:3",
-            negative_prompt=negative_prompt,
         ),
     )
     return response.generated_images[0].image.image_bytes
@@ -315,6 +315,7 @@ with right:
             scenario_text,
             lighting,
             mood,
+            negative_prompt,
         )
 
         with st.expander("Volledige prompt naar Imagen 3", expanded=False):
@@ -322,7 +323,7 @@ with right:
 
         with st.spinner("Stap 2/2 — Lifestyle afbeelding genereren met Imagen 3..."):
             try:
-                image_bytes = generate_lifestyle_image(client, final_prompt, negative_prompt)
+                image_bytes = generate_lifestyle_image(client, final_prompt)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
