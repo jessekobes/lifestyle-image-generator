@@ -310,17 +310,20 @@ with left:
 
     image_model = st.radio(
         "Kies het beeldgeneratiemodel",
-        options=["Gemini Flash (gratis)", "Imagen 3 (betaald, hogere kwaliteit)"],
+        options=["Imagen 3 (aanbevolen, hoogste kwaliteit)", "Gemini Flash (experimenteel)"],
         index=0,
-        help="Gemini Flash is gratis maar minder gedetailleerd. Imagen 3 levert fotorealistische, commerciële kwaliteit maar vereist Google Cloud billing (~€0,03 per afbeelding).",
+        help="Imagen 3 levert fotorealistische, commerciële kwaliteit. Vereist Google Cloud billing (~€0,03 per afbeelding). Gemini Flash is experimenteel en heeft momenteel quota-beperkingen.",
     )
     use_imagen3 = image_model.startswith("Imagen 3")
 
     if use_imagen3:
+        st.info(
+            "**Imagen 3** — commerciële fotokwaliteit. Vereist actieve Google Cloud billing. "
+            "Kosten: ~€0,03–0,04 per afbeelding."
+        )
+    else:
         st.warning(
-            "**Imagen 3 vereist actieve Google Cloud billing.**\n\n"
-            "Zorg dat billing is ingeschakeld op het Google Cloud-project dat gekoppeld is aan je API-sleutel. "
-            "Kosten: ~€0,03–0,04 per gegenereerde afbeelding."
+            "**Gemini Flash** is experimenteel en mogelijk beperkt beschikbaar op de gratis laag."
         )
 
     st.divider()
