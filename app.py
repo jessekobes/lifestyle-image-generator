@@ -164,18 +164,28 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE"],
+                        response_modalities=["IMAGE", "TEXT"],
                     ),
                 )
-                for part in response.candidates[0].content.parts:
+                candidate = response.candidates[0]
+                text_parts = []
+                for part in candidate.content.parts:
                     if part.inline_data is not None:
                         return part.inline_data.data
+                    if hasattr(part, "text") and part.text:
+                        text_parts.append(part.text)
+                if text_parts:
+                    raise RuntimeError(f"Model stuurde tekst in plaats van afbeelding: {' '.join(text_parts)[:300]}")
+                finish = getattr(candidate, "finish_reason", None)
+                raise RuntimeError(f"Geen afbeelding ontvangen (finish_reason: {finish}). Probeer het opnieuw.")
+            except RuntimeError:
+                raise
             except Exception as e:
                 err = str(e)
                 if any(code in err for code in ["404", "503", "429", "NOT_FOUND", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
                     continue
                 raise
-        raise RuntimeError("Geen afbeelding ontvangen. Probeer het opnieuw.")
+        raise RuntimeError("Alle beeldgeneratiemodellen zijn momenteel niet beschikbaar. Probeer het over een minuut opnieuw.")
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
