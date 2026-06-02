@@ -353,10 +353,10 @@ with right:
             negative_prompt,
         )
 
+        model_label = "Imagen 3" if use_imagen3 else "Gemini Flash"
+
         with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
             st.code(final_prompt, language=None)
-
-        model_label = "Imagen 3" if use_imagen3 else "Gemini Flash"
         with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
             try:
                 image_bytes = generate_lifestyle_image(client, final_prompt, use_imagen3=use_imagen3)
