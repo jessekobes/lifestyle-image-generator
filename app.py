@@ -301,6 +301,10 @@ st.session_state.setdefault("lighting", DEFAULT_LIGHTING)
 st.session_state.setdefault("mood", DEFAULT_MOOD)
 st.session_state.setdefault("negative_prompt", DEFAULT_NEGATIVE)
 
+# Apply any pending description update BEFORE widgets are instantiated
+if "_pending_description" in st.session_state:
+    st.session_state.description_edit = st.session_state.pop("_pending_description")
+
 # ── Twee kolommen ─────────────────────────────────────────────────────────────
 left, right = st.columns([1, 1], gap="large")
 
@@ -549,7 +553,7 @@ with right:
                         st.session_state.product_description = description
                         st.session_state.last_files = current_file_names
                         if files_changed or not st.session_state.description_edit:
-                            st.session_state.description_edit = description
+                            st.session_state["_pending_description"] = description
                     except Exception as e:
                         st.error(f"Afbeeldingsanalyse mislukt: {e}")
                         st.stop()
