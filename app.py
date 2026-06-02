@@ -134,20 +134,31 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
     )
 
 
-def generate_lifestyle_image(client, prompt):
+def generate_lifestyle_image(client, prompt, use_imagen3=False):
     from google.genai import types
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-preview-image-generation",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
-        ),
-    )
-    for part in response.candidates[0].content.parts:
-        if part.inline_data is not None:
-            return part.inline_data.data
-    raise RuntimeError("Geen afbeelding ontvangen. Probeer het opnieuw.")
+    if use_imagen3:
+        response = client.models.generate_images(
+            model="imagen-3.0-generate-001",
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="4:3",
+            ),
+        )
+        return response.generated_images[0].image.image_bytes
+    else:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-preview-image-generation",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+            ),
+        )
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                return part.inline_data.data
+        raise RuntimeError("Geen afbeelding ontvangen. Probeer het opnieuw.")
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -255,13 +266,31 @@ with left:
 
     st.divider()
 
-    # ── 4. Waarschuwing gratis limiet ─────────────────────────────────────────
+    # ── 4. Beeldgeneratiemodel ────────────────────────────────────────────────
+    st.subheader("4  Beeldkwaliteit")
+
+    image_model = st.radio(
+        "Kies het beeldgeneratiemodel",
+        options=["Gemini Flash (gratis)", "Imagen 3 (betaald, hogere kwaliteit)"],
+        index=0,
+        help="Gemini Flash is gratis maar minder gedetailleerd. Imagen 3 levert fotorealistische, commerciële kwaliteit maar vereist Google Cloud billing (~€0,03 per afbeelding).",
+    )
+    use_imagen3 = image_model.startswith("Imagen 3")
+
+    if use_imagen3:
+        st.warning(
+            "**Imagen 3 vereist actieve Google Cloud billing.**\n\n"
+            "Zorg dat billing is ingeschakeld op het Google Cloud-project dat gekoppeld is aan je API-sleutel. "
+            "Kosten: ~€0,03–0,04 per gegenereerde afbeelding."
+        )
+
+    st.divider()
+
+    # ── 5. Waarschuwing gratis limiet ─────────────────────────────────────────
     st.warning(
-        "**Let op: gratis API-limieten — lees dit voordat je genereert.**\n\n"
-        "- Gemini Flash: ~10 verzoeken per minuut op de gratis laag.\n"
-        "- Imagen 3: beperkt gratis quota — elke generatie verbruikt quota.\n"
-        "- Snel achter elkaar genereren kan je gratis tegoed uitputten of "
-        "een tijdelijke blokkade veroorzaken.\n\n"
+        "**Let op: API-limieten — lees dit voordat je genereert.**\n\n"
+        "- Gemini Flash analyse: ~10 verzoeken per minuut op de gratis laag.\n"
+        "- Snel achter elkaar genereren kan een tijdelijke blokkade veroorzaken.\n\n"
         "Controleer je verbruik via **Google AI Studio → API usage**."
     )
 
@@ -324,12 +353,13 @@ with right:
             negative_prompt,
         )
 
-        with st.expander("Volledige prompt naar Imagen 3", expanded=False):
+        with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
             st.code(final_prompt, language=None)
 
-        with st.spinner("Stap 2/2 — Lifestyle afbeelding genereren met Imagen 3..."):
+        model_label = "Imagen 3" if use_imagen3 else "Gemini Flash"
+        with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
             try:
-                image_bytes = generate_lifestyle_image(client, final_prompt)
+                image_bytes = generate_lifestyle_image(client, final_prompt, use_imagen3=use_imagen3)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
