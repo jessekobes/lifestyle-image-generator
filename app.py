@@ -10,9 +10,19 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── Gemini client ─────────────────────────────────────────────────────────────
+# ── Gemini clients ────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_client():
+    """Default client (v1beta) — used for text analysis and Gemini Flash image gen."""
+    try:
+        from google import genai
+        return genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    except KeyError:
+        return None
+
+@st.cache_resource
+def get_imagen_client():
+    """v1 client — required for Imagen 3."""
     try:
         from google import genai
         from google.genai import types
@@ -359,7 +369,8 @@ with right:
             st.code(final_prompt, language=None)
         with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
             try:
-                image_bytes = generate_lifestyle_image(client, final_prompt, use_imagen3=use_imagen3)
+                gen_client = get_imagen_client() if use_imagen3 else client
+                image_bytes = generate_lifestyle_image(gen_client, final_prompt, use_imagen3=use_imagen3)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
