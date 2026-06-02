@@ -46,6 +46,14 @@ def get_flash_image_client():
     except KeyError:
         return None
 
+@st.cache_resource
+def get_openai_client():
+    try:
+        from openai import OpenAI
+        return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    except KeyError:
+        return None
+
 # ── Constanten ────────────────────────────────────────────────────────────────
 PRODUCT_TYPES = [
     "Powerbank",
@@ -155,6 +163,20 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
         f"Photorealistic, high-resolution, commercial product photography. "
         f"Avoid: {negative_prompt}"
     )
+
+
+def generate_with_openai(openai_client, prompt):
+    import urllib.request
+    response = openai_client.images.generate(
+        model="dall-e-3",
+        prompt=prompt[:4000],
+        size="1024x1024",
+        quality="standard",
+        n=1,
+    )
+    image_url = response.data[0].url
+    with urllib.request.urlopen(image_url) as r:
+        return r.read()
 
 
 def generate_lifestyle_image(client, prompt, use_imagen3=False):
@@ -310,21 +332,33 @@ with left:
 
     image_model = st.radio(
         "Kies het beeldgeneratiemodel",
-        options=["Imagen 3 (aanbevolen, hoogste kwaliteit)", "Gemini Flash (experimenteel)"],
+        options=[
+            "DALL-E 3 — OpenAI (~€0,04/afbeelding)",
+            "Imagen 3 — Google (~€0,03/afbeelding)",
+            "Gemini Flash (experimenteel)",
+        ],
         index=0,
-        help="Imagen 3 levert fotorealistische, commerciële kwaliteit. Vereist Google Cloud billing (~€0,03 per afbeelding). Gemini Flash is experimenteel en heeft momenteel quota-beperkingen.",
+        help="DALL-E 3 en Imagen 3 zijn betaalde modellen met commerciële kwaliteit. Gemini Flash is experimenteel.",
     )
+    use_openai = image_model.startswith("DALL-E 3")
     use_imagen3 = image_model.startswith("Imagen 3")
 
-    if use_imagen3:
+    if use_openai:
+        openai_client = get_openai_client()
+        if openai_client is None:
+            st.warning(
+                "**OPENAI_API_KEY niet gevonden.** Voeg de sleutel toe aan de Secrets-instellingen "
+                "op Streamlit Community Cloud (Settings → Secrets)."
+            )
+        else:
+            st.info("**DALL-E 3** — OpenAI. Kosten: ~€0,04 per afbeelding (1024×1024).")
+    elif use_imagen3:
         st.info(
-            "**Imagen 3** — commerciële fotokwaliteit. Vereist actieve Google Cloud billing. "
+            "**Imagen 3** — Google. Vereist actieve Google Cloud billing. "
             "Kosten: ~€0,03–0,04 per afbeelding."
         )
     else:
-        st.warning(
-            "**Gemini Flash** is experimenteel en mogelijk beperkt beschikbaar op de gratis laag."
-        )
+        st.warning("**Gemini Flash** is experimenteel en mogelijk beperkt beschikbaar.")
 
     st.divider()
 
@@ -395,14 +429,28 @@ with right:
             negative_prompt,
         )
 
-        model_label = "Imagen 3" if use_imagen3 else "Gemini Flash"
+        if use_openai:
+            model_label = "DALL-E 3 (OpenAI)"
+        elif use_imagen3:
+            model_label = "Imagen 3 (Google)"
+        else:
+            model_label = "Gemini Flash"
 
         with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
             st.code(final_prompt, language=None)
+
         with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
             try:
-                gen_client = get_imagen_client() if use_imagen3 else get_flash_image_client()
-                image_bytes = generate_lifestyle_image(gen_client, final_prompt, use_imagen3=use_imagen3)
+                if use_openai:
+                    oa_client = get_openai_client()
+                    if oa_client is None:
+                        st.error("OPENAI_API_KEY niet gevonden in secrets.")
+                        st.stop()
+                    image_bytes = generate_with_openai(oa_client, final_prompt)
+                elif use_imagen3:
+                    image_bytes = generate_lifestyle_image(get_imagen_client(), final_prompt, use_imagen3=True)
+                else:
+                    image_bytes = generate_lifestyle_image(get_flash_image_client(), final_prompt, use_imagen3=False)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
                 st.stop()
