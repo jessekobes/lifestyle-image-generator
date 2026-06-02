@@ -158,6 +158,7 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
         )
         return response.generated_images[0].image.image_bytes
     else:
+        errors = []
         for model in ["gemini-2.0-flash-exp", "gemini-2.0-flash-preview-image-generation"]:
             try:
                 response = client.models.generate_content(
@@ -175,17 +176,15 @@ def generate_lifestyle_image(client, prompt, use_imagen3=False):
                     if hasattr(part, "text") and part.text:
                         text_parts.append(part.text)
                 if text_parts:
-                    raise RuntimeError(f"Model stuurde tekst in plaats van afbeelding: {' '.join(text_parts)[:300]}")
+                    raise RuntimeError(f"Model stuurde tekst: {' '.join(text_parts)[:300]}")
                 finish = getattr(candidate, "finish_reason", None)
-                raise RuntimeError(f"Geen afbeelding ontvangen (finish_reason: {finish}). Probeer het opnieuw.")
+                raise RuntimeError(f"Geen afbeelding (finish_reason: {finish})")
             except RuntimeError:
                 raise
             except Exception as e:
-                err = str(e)
-                if any(code in err for code in ["404", "503", "429", "NOT_FOUND", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
-                    continue
-                raise
-        raise RuntimeError("Alle beeldgeneratiemodellen zijn momenteel niet beschikbaar. Probeer het over een minuut opnieuw.")
+                errors.append(f"{model}: {e}")
+                continue
+        raise RuntimeError("Alle modellen gefaald:\n" + "\n".join(errors))
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
