@@ -33,6 +33,19 @@ def get_imagen_client():
     except KeyError:
         return None
 
+@st.cache_resource
+def get_flash_image_client():
+    """v1alpha client — required for experimental Gemini image generation models."""
+    try:
+        from google import genai
+        from google.genai import types
+        return genai.Client(
+            api_key=st.secrets["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(api_version="v1alpha"),
+        )
+    except KeyError:
+        return None
+
 # ── Constanten ────────────────────────────────────────────────────────────────
 PRODUCT_TYPES = [
     "Powerbank",
@@ -385,7 +398,7 @@ with right:
             st.code(final_prompt, language=None)
         with st.spinner(f"Stap 2/2 — Lifestyle afbeelding genereren met {model_label}..."):
             try:
-                gen_client = get_imagen_client() if use_imagen3 else client
+                gen_client = get_imagen_client() if use_imagen3 else get_flash_image_client()
                 image_bytes = generate_lifestyle_image(gen_client, final_prompt, use_imagen3=use_imagen3)
             except Exception as e:
                 st.error(f"Afbeeldingsgeneratie mislukt: {e}")
