@@ -193,20 +193,14 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
 
 
 
-def generate_with_huggingface(prompt):
-    import requests, time
-    hf_token = st.secrets.get("HF_TOKEN", None)
-    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
-    url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-    for attempt in range(3):
-        response = requests.post(url, headers=headers, json={"inputs": prompt[:1000]}, timeout=60)
-        if response.status_code == 503:
-            time.sleep(20)
-            continue
-        if response.status_code != 200:
-            raise RuntimeError(f"Hugging Face fout {response.status_code}: {response.text[:300]}")
-        return response.content
-    raise RuntimeError("Hugging Face model start nog op. Probeer het over 30 seconden opnieuw.")
+def generate_with_pollinations(prompt):
+    import requests, urllib.parse
+    encoded = urllib.parse.quote(prompt[:800])
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=768&model=flux&nologo=true&enhance=false"
+    response = requests.get(url, timeout=120)
+    if response.status_code != 200:
+        raise RuntimeError(f"Pollinations fout {response.status_code}: {response.text[:200]}")
+    return response.content
 
 
 def generate_lifestyle_image(client, prompt, use_imagen3=False):
@@ -379,20 +373,20 @@ with left:
     image_model = st.radio(
         "Kies het beeldgeneratiemodel",
         options=[
-            "FLUX.1-schnell — Hugging Face (gratis, testen)",
+            "FLUX — Pollinations.ai (gratis, testen)",
             "Imagen 3 — Google (~€0,03/afbeelding)",
             "Gemini Flash (experimenteel)",
         ],
         index=0,
-        help="FLUX.1-schnell is gratis via Hugging Face, ideaal om te testen. Imagen 3 geeft de hoogste commerciële kwaliteit maar vereist Google Cloud billing.",
+        help="FLUX via Pollinations.ai is volledig gratis, geen API-sleutel nodig. Imagen 3 geeft de hoogste kwaliteit maar vereist Google Cloud billing.",
     )
     use_hf = image_model.startswith("FLUX")
     use_imagen3 = image_model.startswith("Imagen 3")
 
     if use_hf:
         st.info(
-            "**FLUX.1-schnell** — gratis via Hugging Face. Voeg optioneel `HF_TOKEN` toe aan "
-            "Streamlit Secrets voor hogere rate limits. Goed voor testen."
+            "**FLUX via Pollinations.ai** — volledig gratis, geen API-sleutel nodig. "
+            "Ideaal om de prompt-kwaliteit te testen voor productiegebruik."
         )
     elif use_imagen3:
         st.info(
@@ -498,7 +492,7 @@ with right:
         )
 
         if use_hf:
-            model_label = "FLUX.1-schnell (Hugging Face)"
+            model_label = "FLUX (Pollinations.ai)"
         elif use_imagen3:
             model_label = "Imagen 3 (Google)"
         else:
@@ -510,7 +504,7 @@ with right:
         with st.spinner(f"{step_label} — Lifestyle afbeelding genereren met {model_label}..."):
             try:
                 if use_hf:
-                    image_bytes = generate_with_huggingface(final_prompt)
+                    image_bytes = generate_with_pollinations(final_prompt)
                 elif use_imagen3:
                     image_bytes = generate_lifestyle_image(get_imagen_client(), final_prompt, use_imagen3=True)
                 else:
