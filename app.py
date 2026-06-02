@@ -106,11 +106,15 @@ def analyze_product_images(client, uploaded_files, product_type):
         )
     )
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=parts,
-    )
-    return response.text.strip()
+    for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        try:
+            response = client.models.generate_content(model=model, contents=parts)
+            return response.text.strip()
+        except Exception as e:
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                continue
+            raise
+    raise RuntimeError("All models unavailable. Please try again in a minute.")
 
 
 def build_final_prompt(product_description, product_type, scenario_text, lighting, mood):
@@ -273,6 +277,7 @@ with right:
                     for f in uploaded_files:
                         f.seek(0)
                     description = analyze_product_images(client, uploaded_files, product_type)
+
                     st.session_state.product_description = description
                     st.session_state.last_files = current_file_names
                 except Exception as e:
