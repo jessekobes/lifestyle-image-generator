@@ -106,7 +106,7 @@ def analyze_product_images(client, uploaded_files, product_type):
         )
     )
 
-    for model in ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
+    for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]:
         try:
             response = client.models.generate_content(model=model, contents=parts)
             return response.text.strip()
