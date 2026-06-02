@@ -106,12 +106,13 @@ def analyze_product_images(client, uploaded_files, product_type):
         )
     )
 
-    for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+    for model in ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
         try:
             response = client.models.generate_content(model=model, contents=parts)
             return response.text.strip()
         except Exception as e:
-            if "503" in str(e) or "UNAVAILABLE" in str(e):
+            err = str(e)
+            if any(code in err for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
                 continue
             raise
     raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
