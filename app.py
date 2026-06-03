@@ -116,18 +116,20 @@ POLLINATIONS_SIZES = {
 }
 
 SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
-Describe the environment and setting visible in this image so it can be used as a backdrop for a product photo.
+Describe the full scene so it can be recreated as a lifestyle product photograph.
 
-Focus ONLY on:
+Include ALL of the following if visible:
 - The surface or foreground where a product could be placed (material, texture, color)
-- Nearby props and objects visible in the scene
+- Nearby props and objects in the scene
 - Background environment and depth
 - Lighting conditions (direction, quality, warm/cool, soft/hard)
 - Overall atmosphere and mood
+- Any people present: approximate age range, gender expression, clothing style, pose,
+  and what they are doing — but do NOT describe or reference their face or identity
 
-Do NOT describe any people, faces, or main subjects in the image.
 Output a single concise paragraph starting with "placed on/in/near..." that describes
-where and how a product would appear in this scene. No headers, no lists."""
+where and how a product would appear in this scene, including any human lifestyle context.
+No headers, no lists."""
 
 ANALYSIS_PROMPT = """You are a professional product photographer's assistant.
 Analyze the uploaded product image(s) and produce a hyper-detailed, technical
