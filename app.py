@@ -176,6 +176,10 @@ PRODUCT_SCENE_MODIFIER = {
         "The case is fitted snugly on a matching smartphone, showcasing its design, texture, "
         "and color."
     ),
+    "Smartwatch": (
+        "The smartwatch is displayed on a wrist or laid flat, with the watch face and "
+        "band material clearly visible."
+    ),
 }
 
 SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
@@ -430,9 +434,23 @@ with left:
             ["USB-C", "USB-A", "Lightning", "Micro-USB"],
             help="Stekkertype aan de andere kant van de kabel.",
         )
+        cable_length = st.selectbox(
+            "Kabellengte",
+            ["0.5m (kort)", "1m", "1.5m", "2m", "3m (lang)"],
+            index=1,
+            help="Lengte bepaalt hoe de kabel in de scène ligt.",
+        )
+        length_descriptions = {
+            "0.5m (kort)": "It is 0.5m long and lies in a short, tight coil or stretched tightly between two closely placed devices.",
+            "1m":          "It is 1m long and lies naturally, either loosely coiled or gently stretched between two devices.",
+            "1.5m":        "It is 1.5m long and drapes in a relaxed curve.",
+            "2m":          "It is 2m long and drapes loosely in a relaxed S-curve or gentle wide coil.",
+            "3m (lang)":   "It is 3m long and lies in a large, loose coil or drapes dramatically across the scene.",
+        }
         product_specs = (
             f"The cable has a {connector_a} connector on one end and a {connector_b} connector "
-            f"on the other. Both connectors must be rendered accurately and clearly visible."
+            f"on the other. Both connectors must be rendered accurately and clearly visible. "
+            + length_descriptions[cable_length]
         )
 
     elif product_type == "Powerbank":
@@ -467,6 +485,55 @@ with left:
         if gan:
             specs.append("GaN compact design — small form factor, no large brick shape")
         product_specs = "Product specifications — " + "; ".join(specs) + "." if specs else None
+
+    elif product_type == "Smartphonehoesje":
+        mount_type = None
+        phone_model = st.selectbox(
+            "Telefoonmodel",
+            [
+                "iPhone 16 Pro Max", "iPhone 16 Pro", "iPhone 16 Plus", "iPhone 16",
+                "iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15",
+                "Samsung Galaxy S25 Ultra", "Samsung Galaxy S25+", "Samsung Galaxy S25",
+                "Samsung Galaxy S24 Ultra", "Samsung Galaxy S24",
+                "Google Pixel 9 Pro", "Google Pixel 9",
+                "OnePlus 13",
+                "Anders / Niet gespecificeerd",
+            ],
+            help="Welk telefoonmodel past dit hoesje? Bepaalt de camera-uitsparing en proporties.",
+        )
+        if phone_model != "Anders / Niet gespecificeerd":
+            product_specs = (
+                f"This case is specifically designed for the {phone_model}. "
+                f"The phone shape, camera module cutout, button cutouts, and proportions "
+                f"must exactly match a {phone_model}."
+            )
+        else:
+            product_specs = None
+
+    elif product_type == "Smartwatch":
+        mount_type = None
+        band_type = st.selectbox(
+            "Bandje type",
+            [
+                "Siliconen sportband",
+                "Leren band",
+                "Metaal mesh / Milanese loop",
+                "Gevlochten nylon band",
+                "Rubberen sportband",
+            ],
+            help="Het bandjetype bepaalt de sfeer van de lifestyle-foto.",
+        )
+        band_descriptions = {
+            "Siliconen sportband":         "silicone sport band — smooth, flexible, athletic feel",
+            "Leren band":                  "genuine leather strap — elegant, professional, warm texture",
+            "Metaal mesh / Milanese loop": "metal mesh / Milanese loop strap — premium stainless steel woven texture",
+            "Gevlochten nylon band":       "woven nylon band — casual, colorful, fabric texture",
+            "Rubberen sportband":          "rubber sport band — durable, matte, athletic",
+        }
+        product_specs = (
+            f"The watch has a {band_descriptions[band_type]}. "
+            f"The band material and texture must be clearly and accurately visible."
+        )
 
     else:
         mount_type = None
