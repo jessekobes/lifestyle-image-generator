@@ -89,6 +89,7 @@ SCENARIOS = {
     ),
     "✏️ Eigen scenario": None,
     "📷 Voorbeeldafbeelding": None,
+    "👤 Modelafbeelding": None,
 }
 
 TELEFOONHOUDER_SCENARIOS = {
@@ -118,6 +119,7 @@ TELEFOONHOUDER_SCENARIOS = {
     ),
     "✏️ Eigen scenario": None,
     "📷 Voorbeeldafbeelding": None,
+    "👤 Modelafbeelding": None,
 }
 
 MOUNT_TYPES = {
@@ -198,6 +200,22 @@ Output a single concise paragraph starting with "placed on/in/near..." that desc
 where and how a product would appear in this scene, including any human lifestyle context.
 No headers, no lists."""
 
+MODEL_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference photo of a person.
+Describe the person so they can be recreated in a lifestyle product photograph.
+
+Include ALL of the following if visible:
+- Approximate age range (e.g. "mid-20s", "early 30s")
+- Gender expression
+- Skin tone (descriptive terms: "light", "medium", "deep warm olive", etc.)
+- Hair: color, length, and style
+- Clothing: each garment — color, style, material (e.g. "white oversized linen shirt", "dark slim-fit jeans")
+- Visible accessories (rings, watch, earrings, necklace, etc.)
+- Body position and pose (standing, seated, leaning, etc.)
+- What the hands are doing
+
+Do NOT describe, reference, or attempt to identify the person's face or any biometric features.
+Output a single descriptive paragraph about the person. No headers, no lists."""
+
 ANALYSIS_PROMPT = """You are a professional product photographer's assistant.
 Analyze the uploaded product image(s) and produce a hyper-detailed, technical
 visual description of the physical product, including all branding exactly as it appears.
@@ -228,6 +246,25 @@ def analyze_scene_image(client, scene_file):
     parts = [
         uploaded_file_to_part(scene_file),
         types.Part.from_text(text=SCENE_ANALYSIS_PROMPT),
+    ]
+    for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]:
+        try:
+            response = client.models.generate_content(model=model, contents=parts)
+            return response.text.strip()
+        except Exception as e:
+            err = str(e)
+            if any(code in err for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                continue
+            raise
+    raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
+
+
+def analyze_model_image(client, model_file):
+    from google.genai import types
+    model_file.seek(0)
+    parts = [
+        uploaded_file_to_part(model_file),
+        types.Part.from_text(text=MODEL_ANALYSIS_PROMPT),
     ]
     for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]:
         try:
@@ -289,6 +326,21 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
         f"Professional lifestyle product photograph. "
         f"A {product_type} — described as: {product_description}.{specs_clause} "
         f"The product {placement}{modifier_clause} "
+        f"Lighting style: {lighting}. "
+        f"Visual mood: {mood}. "
+        f"Photorealistic, high-resolution, commercial product photography. "
+        f"Avoid: {negative_prompt}"
+    )
+
+
+def build_model_prompt(product_description, product_type, model_description,
+                       lighting, mood, negative_prompt, product_specs=None):
+    specs_clause = f" {product_specs}" if product_specs else ""
+    return (
+        f"Professional lifestyle product photograph. "
+        f"A person — {model_description} — is actively using or holding a {product_type}: "
+        f"{product_description}.{specs_clause} "
+        f"The product is clearly visible and featured prominently in the image. "
         f"Lighting style: {lighting}. "
         f"Visual mood: {mood}. "
         f"Photorealistic, high-resolution, commercial product photography. "
@@ -382,6 +434,8 @@ st.session_state.setdefault("product_description", None)
 st.session_state.setdefault("last_files", [])
 st.session_state.setdefault("scene_description", None)
 st.session_state.setdefault("last_scene_file", None)
+st.session_state.setdefault("model_description", None)
+st.session_state.setdefault("last_model_file", None)
 st.session_state.setdefault("description_edit", "")
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("brand_profiles", {
@@ -646,6 +700,7 @@ with left:
         )
         scenario_text = custom_scenario.strip()
         scene_image = None
+        model_image = None
         if scenario_text:
             st.info(f"**Jouw scène:** Het product is {scenario_text}")
         else:
@@ -658,14 +713,30 @@ with left:
             help="Upload een foto van de omgeving of setting waar je het product in wilt plaatsen.",
         )
         scenario_text = None
+        model_image = None
         if scene_image:
             st.image(scene_image, caption="Voorbeeldscène", use_container_width=True)
             st.info("Gemini analyseert deze scène automatisch bij het genereren.")
         else:
             st.warning("Upload een voorbeeldafbeelding om te kunnen genereren.")
+    elif scenario_name == "👤 Modelafbeelding":
+        model_image = st.file_uploader(
+            "Upload een foto van het model",
+            type=["jpg", "jpeg", "png", "webp"],
+            accept_multiple_files=False,
+            help="Upload een foto van de persoon die het product draagt of vasthoudt.",
+        )
+        scenario_text = None
+        scene_image = None
+        if model_image:
+            st.image(model_image, caption="Model referentie", use_container_width=True)
+            st.info("Gemini analyseert het model automatisch bij het genereren.")
+        else:
+            st.warning("Upload een modelfoto om te kunnen genereren.")
     else:
         scenario_text = active_scenarios[scenario_name]
         scene_image = None
+        model_image = None
         st.info(f"**Scène:** Het product is {scenario_text}")
 
     st.divider()
@@ -723,11 +794,12 @@ with left:
 
     custom_empty = (scenario_name == "✏️ Eigen scenario" and not scenario_text)
     scene_empty = (scenario_name == "📷 Voorbeeldafbeelding" and not scene_image)
+    model_empty = (scenario_name == "👤 Modelafbeelding" and not model_image)
 
     generate_btn = st.button(
         "Lifestyle afbeelding genereren",
         type="primary",
-        disabled=not confirmed or not uploaded_files or custom_empty or scene_empty,
+        disabled=not confirmed or not uploaded_files or custom_empty or scene_empty or model_empty,
         use_container_width=True,
     )
 
@@ -737,6 +809,8 @@ with left:
         st.caption("Vul een scenariobeschrijving in om te kunnen genereren.")
     elif scene_empty:
         st.caption("Upload een voorbeeldafbeelding van de scène om te kunnen genereren.")
+    elif model_empty:
+        st.caption("Upload een modelfoto om te kunnen genereren.")
     elif not confirmed:
         st.caption("Vink het bevestigingsvakje hierboven aan om de knop te activeren.")
 
@@ -794,24 +868,53 @@ with right:
                 active_scenario_text = st.session_state.scene_description
                 with st.expander("Scènebeschrijving (automatisch gegenereerd)", expanded=False):
                     st.write(active_scenario_text)
+                use_model_prompt = False
                 step_label = "Stap 3"
+
+            elif scenario_name == "👤 Modelafbeelding":
+                model_file_name = model_image.name if model_image else None
+                if model_file_name != st.session_state.last_model_file or st.session_state.model_description is None:
+                    with st.spinner("Stap 2 — Modelafbeelding analyseren met Gemini..."):
+                        try:
+                            model_desc = analyze_model_image(client, model_image)
+                            st.session_state.model_description = model_desc
+                            st.session_state.last_model_file = model_file_name
+                        except Exception as e:
+                            st.error(f"Modelanalyse mislukt: {e}")
+                            st.stop()
+                with st.expander("Modelbeschrijving (automatisch gegenereerd)", expanded=False):
+                    st.write(st.session_state.model_description)
+                use_model_prompt = True
+                step_label = "Stap 3"
+
             else:
                 active_scenario_text = scenario_text
+                use_model_prompt = False
                 step_label = "Stap 2"
 
-            with st.expander("Productbeschrijving (gebruikt voor generatie)", expanded=False):
-                st.write(st.session_state.description_edit or st.session_state.product_description)
-
-            final_prompt = build_final_prompt(
-                st.session_state.description_edit or st.session_state.product_description,
-                product_type,
-                active_scenario_text,
-                lighting,
-                mood,
-                negative_prompt,
-                mount_type=mount_type,
-                product_specs=product_specs,
-            )
+            if use_model_prompt:
+                final_prompt = build_model_prompt(
+                    st.session_state.description_edit or st.session_state.product_description,
+                    product_type,
+                    st.session_state.model_description,
+                    lighting,
+                    mood,
+                    negative_prompt,
+                    product_specs=product_specs,
+                )
+            else:
+                with st.expander("Productbeschrijving (gebruikt voor generatie)", expanded=False):
+                    st.write(st.session_state.description_edit or st.session_state.product_description)
+                final_prompt = build_final_prompt(
+                    st.session_state.description_edit or st.session_state.product_description,
+                    product_type,
+                    active_scenario_text,
+                    lighting,
+                    mood,
+                    negative_prompt,
+                    mount_type=mount_type,
+                    product_specs=product_specs,
+                )
 
             if use_hf:
                 model_label = "FLUX (Pollinations.ai)"
