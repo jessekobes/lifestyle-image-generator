@@ -426,12 +426,12 @@ with left:
         col_a, col_b = st.columns(2)
         connector_a = col_a.selectbox(
             "Connector kant 1",
-            ["USB-C", "USB-A", "Lightning", "Micro-USB"],
+            ["USB-C", "USB-A", "Lightning", "Micro-USB", "AUX (3.5mm)", "Garmin (proprietary)"],
             help="Stekkertype aan de ene kant van de kabel.",
         )
         connector_b = col_b.selectbox(
             "Connector kant 2",
-            ["USB-C", "USB-A", "Lightning", "Micro-USB"],
+            ["USB-C", "USB-A", "Lightning", "Micro-USB", "AUX (3.5mm)", "Garmin (proprietary)"],
             help="Stekkertype aan de andere kant van de kabel.",
         )
         cable_length = st.selectbox(
