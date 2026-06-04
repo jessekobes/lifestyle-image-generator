@@ -121,6 +121,15 @@ TELEFOONHOUDER_SCENARIOS = {
     "📷 Voorbeeldafbeelding": None,
 }
 
+MOUNT_TYPES = {
+    "Ventilatierooster": "clipped onto the car air vent via an air vent clip mount",
+    "Zuignap — Dashboard": "attached to the car dashboard via a suction cup base",
+    "Zuignap — Voorruit": "mounted on the inside of the front windshield via a suction cup arm",
+    "Bekerhouder": "inserted and secured in the car cup holder",
+    "CD-sleuf": "locked into the car's CD slot via a CD slot insert adapter",
+    "Hoofdsteun (achterbank)": "strapped to the rear headrest, facing the back seat passengers",
+}
+
 DEFAULT_LIGHTING = (
     "Warm, bright, and natural tones. Soft golden hour sunlight or clean interior "
     "lighting. Avoid dark neon profiles."
@@ -227,10 +236,11 @@ def analyze_product_images(client, uploaded_files, product_type):
     raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
 
 
-def build_final_prompt(product_description, product_type, scenario_text, lighting, mood, negative_prompt):
+def build_final_prompt(product_description, product_type, scenario_text, lighting, mood, negative_prompt, mount_type=None):
+    mount_clause = f" The holder is {mount_type}." if mount_type else ""
     return (
         f"Professional lifestyle product photograph. "
-        f"A {product_type} — described as: {product_description} — "
+        f"A {product_type} — described as: {product_description} —{mount_clause} "
         f"is {scenario_text} "
         f"Lighting style: {lighting}. "
         f"Visual mood: {mood}. "
@@ -353,6 +363,16 @@ with left:
         index=0,
         help="Selecteer het type product dat je fotografeert.",
     )
+
+    if product_type == "Telefoonhouder":
+        mount_label = st.selectbox(
+            "Bevestigingstype",
+            options=list(MOUNT_TYPES.keys()),
+            help="Hoe wordt de houder in de auto bevestigd?",
+        )
+        mount_type = MOUNT_TYPES[mount_label]
+    else:
+        mount_type = None
 
     uploaded_files = st.file_uploader(
         "Upload productfoto's (voor-, zij- en bovenaanzicht — max. 5)",
@@ -624,6 +644,7 @@ with right:
                 lighting,
                 mood,
                 negative_prompt,
+                mount_type=mount_type,
             )
 
             if use_hf:
