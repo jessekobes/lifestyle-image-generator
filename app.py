@@ -156,6 +156,28 @@ POLLINATIONS_SIZES = {
     "16:9": (1024, 576),
 }
 
+# Per product type: how the product physically appears in any scene.
+# Appended to every scenario so the AI knows the correct depiction regardless of scene choice.
+PRODUCT_SCENE_MODIFIER = {
+    "Kabel": (
+        "The cable lies naturally in the scene with both connector ends spread apart and "
+        "clearly identifiable. The connectors specified above are the absolute top priority — "
+        "they must be rendered with exact accuracy."
+    ),
+    "Powerbank": (
+        "The powerbank is displayed with its ports and any LED indicators facing the viewer "
+        "and clearly visible."
+    ),
+    "Oplader": (
+        "The charger is positioned with its port(s) and charging surface facing the viewer "
+        "and clearly visible."
+    ),
+    "Smartphonehoesje": (
+        "The case is fitted snugly on a matching smartphone, showcasing its design, texture, "
+        "and color."
+    ),
+}
+
 SCENE_ANALYSIS_PROMPT = """You are a professional product photographer's assistant analyzing a reference scene image.
 Describe the full scene so it can be recreated as a lifestyle product photograph.
 
@@ -237,15 +259,32 @@ def analyze_product_images(client, uploaded_files, product_type):
 
 def build_final_prompt(product_description, product_type, scenario_text, lighting, mood,
                        negative_prompt, mount_type=None, product_specs=None):
-    specs_clause = f" {product_specs}" if product_specs else ""
+    scene_modifier = PRODUCT_SCENE_MODIFIER.get(product_type, "")
+    modifier_clause = f" {scene_modifier}" if scene_modifier else ""
+
     if mount_type:
         placement = f"is {mount_type}. The holder {scenario_text}"
     else:
         placement = f"is {scenario_text}"
+
+    # For cables: put connector specs at the very top so the AI treats them as highest priority.
+    if product_type == "Kabel" and product_specs:
+        return (
+            f"{product_specs} "
+            f"Professional lifestyle product photograph. "
+            f"A {product_type} — described as: {product_description}. "
+            f"The product {placement}{modifier_clause} "
+            f"Lighting style: {lighting}. "
+            f"Visual mood: {mood}. "
+            f"Photorealistic, high-resolution, commercial product photography. "
+            f"Avoid: {negative_prompt}"
+        )
+
+    specs_clause = f" {product_specs}" if product_specs else ""
     return (
         f"Professional lifestyle product photograph. "
         f"A {product_type} — described as: {product_description}.{specs_clause} "
-        f"The product {placement} "
+        f"The product {placement}{modifier_clause} "
         f"Lighting style: {lighting}. "
         f"Visual mood: {mood}. "
         f"Photorealistic, high-resolution, commercial product photography. "
