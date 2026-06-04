@@ -56,6 +56,7 @@ PRODUCT_TYPES = [
     "Laptophoes",
     "Smartwatch",
     "Draadloze Speaker",
+    "Telefoonhouder",
     "Anders",
 ]
 
@@ -83,6 +84,38 @@ SCENARIOS = {
     "Natuur / Buiten": (
         "placed on a rough, dusty grey rock next to a folded paper map and a standard "
         "metallic climbing carabiner. Diffused, overcast daylight in a pine forest."
+    ),
+    "✏️ Eigen scenario": None,
+    "📷 Voorbeeldafbeelding": None,
+}
+
+TELEFOONHOUDER_SCENARIOS = {
+    "De Dagelijkse Forens": (
+        "securely mounted via its suction cup base onto a modern textured black leather car "
+        "dashboard. A premium smartphone is magnetically snapped onto the square mount face, "
+        "displaying a GPS navigation map screen. Crisp, bright morning sunlight streams through "
+        "the front windshield, casting realistic soft shadows across the clean car interior, "
+        "with the steering wheel softly blurred in the background."
+    ),
+    "Nachtelijke Stadsrit": (
+        "clipped firmly into the horizontal slats of a sleek car air vent. A smartphone is "
+        "magnetically attached to the mount, displaying a dark-mode music playlist. The car "
+        "cabin is dimly lit with subtle ambient dashboard lights, while the side window reveals "
+        "a cinematic, softly blurred bokeh of colorful city neon lights and traffic at night."
+    ),
+    "De Zomerse Roadtrip": (
+        "mounted onto the inside of the front windshield via its adjustable telescopic arm, "
+        "angled perfectly towards the driver's view. A thin black USB-C cable runs neatly from "
+        "the bottom of the mount. Warm, golden sunset light floods the car interior, creating "
+        "long soft shadows, with an open scenic highway stretching into the distance softly "
+        "blurred through the windshield."
+    ),
+    "Premium & Luxe": (
+        "installed elegantly on the minimalist carbon-fiber dashboard trim of a luxury electric "
+        "vehicle. A smartphone is attached horizontally to the magnetic mount. The lighting is "
+        "clean, diffused, and overhead, highlighting the premium matte textures and metallic "
+        "joints of the mount, looking pristine, high-tech, and perfectly proportional to the "
+        "high-end car interior."
     ),
     "✏️ Eigen scenario": None,
     "📷 Voorbeeldafbeelding": None,
@@ -406,9 +439,11 @@ with left:
     # ── 3. Scenariokeuze ──────────────────────────────────────────────────────
     st.subheader("3  Lifestyle Scenario")
 
+    active_scenarios = TELEFOONHOUDER_SCENARIOS if product_type == "Telefoonhouder" else SCENARIOS
+
     scenario_name = st.selectbox(
         "Kies een scenario",
-        options=list(SCENARIOS.keys()),
+        options=list(active_scenarios.keys()),
         index=0,
     )
 
@@ -444,7 +479,7 @@ with left:
         else:
             st.warning("Upload een voorbeeldafbeelding om te kunnen genereren.")
     else:
-        scenario_text = SCENARIOS[scenario_name]
+        scenario_text = active_scenarios[scenario_name]
         scene_image = None
         st.info(f"**Scène:** Het product is {scenario_text}")
 
