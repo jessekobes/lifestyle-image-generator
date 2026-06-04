@@ -51,6 +51,8 @@ def get_flash_image_client():
 # ── Constanten ────────────────────────────────────────────────────────────────
 PRODUCT_TYPES = [
     "Powerbank",
+    "Kabel",
+    "Oplader",
     "Draadloze Oordopjes",
     "Smartphonehoesje",
     "Laptophoes",
@@ -233,15 +235,17 @@ def analyze_product_images(client, uploaded_files, product_type):
     raise RuntimeError("Alle modellen zijn momenteel overbelast. Probeer het over een minuut opnieuw.")
 
 
-def build_final_prompt(product_description, product_type, scenario_text, lighting, mood, negative_prompt, mount_type=None):
+def build_final_prompt(product_description, product_type, scenario_text, lighting, mood,
+                       negative_prompt, mount_type=None, product_specs=None):
+    specs_clause = f" {product_specs}" if product_specs else ""
     if mount_type:
         placement = f"is {mount_type}. The holder {scenario_text}"
     else:
         placement = f"is {scenario_text}"
     return (
         f"Professional lifestyle product photograph. "
-        f"A {product_type} — described as: {product_description} — "
-        f"{placement} "
+        f"A {product_type} — described as: {product_description}.{specs_clause} "
+        f"The product {placement} "
         f"Lighting style: {lighting}. "
         f"Visual mood: {mood}. "
         f"Photorealistic, high-resolution, commercial product photography. "
@@ -371,8 +375,63 @@ with left:
             help="Hoe wordt de houder in de auto bevestigd?",
         )
         mount_type = MOUNT_TYPES[mount_label]
+        magsafe_holder = st.checkbox("MagSafe compatibel (magneetring zichtbaar op het montageoppervlak)")
+        product_specs = "The mount face has a visible MagSafe magnetic ring." if magsafe_holder else None
+
+    elif product_type == "Kabel":
+        mount_type = None
+        col_a, col_b = st.columns(2)
+        connector_a = col_a.selectbox(
+            "Connector kant 1",
+            ["USB-C", "USB-A", "Lightning", "Micro-USB"],
+            help="Stekkertype aan de ene kant van de kabel.",
+        )
+        connector_b = col_b.selectbox(
+            "Connector kant 2",
+            ["USB-C", "USB-A", "Lightning", "Micro-USB"],
+            help="Stekkertype aan de andere kant van de kabel.",
+        )
+        product_specs = (
+            f"The cable has a {connector_a} connector on one end and a {connector_b} connector "
+            f"on the other. Both connectors must be rendered accurately and clearly visible."
+        )
+
+    elif product_type == "Powerbank":
+        mount_type = None
+        ports = st.multiselect(
+            "Aanwezige poorten",
+            ["USB-C", "USB-A", "Micro-USB", "Lightning (output)"],
+            help="Selecteer alle poorten die op de powerbank aanwezig zijn.",
+        )
+        magsafe_pb = st.checkbox("MagSafe / Qi2 wireless charging (ring zichtbaar op de achterkant)")
+        specs = []
+        if ports:
+            specs.append(f"visible ports on the housing: {', '.join(ports)}")
+        if magsafe_pb:
+            specs.append("MagSafe / Qi2 magnetic wireless charging ring clearly visible on the back surface")
+        product_specs = "Product specifications — " + "; ".join(specs) + "." if specs else None
+
+    elif product_type == "Oplader":
+        mount_type = None
+        ports = st.multiselect(
+            "Aanwezige poorten",
+            ["USB-C", "USB-A"],
+            help="Selecteer alle poorten die op de oplader aanwezig zijn.",
+        )
+        magsafe_ch = st.checkbox("MagSafe / Qi wireless (voor draadloze pads of stands)")
+        gan = st.checkbox("GaN technologie (compact formaat, geen groot blokje)")
+        specs = []
+        if ports:
+            specs.append(f"visible ports: {', '.join(ports)}")
+        if magsafe_ch:
+            specs.append("MagSafe / Qi wireless charging surface clearly visible")
+        if gan:
+            specs.append("GaN compact design — small form factor, no large brick shape")
+        product_specs = "Product specifications — " + "; ".join(specs) + "." if specs else None
+
     else:
         mount_type = None
+        product_specs = None
 
     uploaded_files = st.file_uploader(
         "Upload productfoto's (voor-, zij- en bovenaanzicht — max. 5)",
@@ -645,6 +704,7 @@ with right:
                 mood,
                 negative_prompt,
                 mount_type=mount_type,
+                product_specs=product_specs,
             )
 
             if use_hf:
@@ -662,6 +722,7 @@ with right:
                 "use_hf": use_hf, "use_imagen3": use_imagen3,
                 "aspect_ratio": aspect_ratio_key, "n": number_of_images,
                 "model_label": model_label, "safe_name": safe_name,
+                "product_specs": product_specs,
             }
 
         with st.expander(f"Volledige prompt naar {model_label}", expanded=False):
