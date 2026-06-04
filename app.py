@@ -267,8 +267,8 @@ def build_final_prompt(product_description, product_type, scenario_text, lightin
     else:
         placement = f"is {scenario_text}"
 
-    # For cables: put connector specs at the very top so the AI treats them as highest priority.
-    if product_type == "Kabel" and product_specs:
+    # For technical products: put specs at the very top so the AI treats them as highest priority.
+    if product_type in ("Kabel", "Powerbank", "Oplader") and product_specs:
         return (
             f"{product_specs} "
             f"Professional lifestyle product photograph. "
